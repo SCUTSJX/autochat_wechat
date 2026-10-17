@@ -14,7 +14,7 @@
 
 程序通过 Frida 接收运行中微信的新消息，通过 AT-SPI 识别聊天控件，并使用 X11 虚拟光标完成发送。图片识别使用会话窗口截图，不依赖微信图片缓存目录。
 
-> **项目状态：测试阶段，许可证待确定。** 当前只适配特定 Linux 微信构建，并非适用于所有微信版本。首次使用请先在测试好友会话中完成初始化和收发验证。许可证与分发说明见 [DISTRIBUTION.md](DISTRIBUTION.md)。
+> **项目状态：测试阶段。** 目前支持的 Linux 微信构建见[环境要求](#requirements)。首次使用请先在测试好友会话中完成初始化和收发验证。
 
 <a id="contents"></a>
 
@@ -66,7 +66,7 @@
 | 操作系统 | **已实测：Ubuntu 20.04.6 LTS，64 位（x86_64 / amd64）**，图形桌面，具备 `apt-get` 和 `sudo` |
 | 桌面会话 | **Xorg**；不支持 Wayland 下的完整工作流程 |
 | 微信 | 已安装并登录的 Linux 微信 **4.1.13.26 / amd64**，且二进制指纹与适配文件匹配 |
-| Python | **原可运行环境为 Python 3.8.10**；安装器使用系统 `python3` 创建虚拟环境，其他版本不保证适配 |
+| Python | **已实测：Python 3.8.10**；安装器使用系统 `python3` 创建虚拟环境，其他版本不保证适配 |
 | 模型服务 | 文字接口支持 Chat Completions；图片接口还需支持图片输入 |
 | 网络 | 安装时可访问 Ubuntu 软件源和 Python 包源；运行时可访问所配置的模型服务 |
 | 使用账号 | 普通桌面用户；脚本在必要步骤自动请求 `sudo` |
@@ -81,9 +81,9 @@
 
 ### 已实测环境与依赖版本
 
-**已实测可行的 Ubuntu 64 位版本为 20.04.6 LTS（amd64）。** 下表的系统版本由维护者确认，Python 和依赖版本来自原可正常运行环境的 `pyvenv.cfg` 与包元数据；它们是复现环境参考，不表示所有同版本安装包或新初始化场景均已验证。
+**已实测环境为 Ubuntu 20.04.6 LTS（amd64）。** 下表列出测试环境中的 Python 和依赖版本，供复现时参考；相同版本号不代表所有安装包和配置场景均已验证。
 
-| 组件 | 原可运行环境记录的版本 |
+| 组件 | 已实测版本 |
 | --- | --- |
 | Ubuntu | **20.04.6 LTS，64 位 / amd64** |
 | Linux 微信 | **4.1.13.26 / amd64**，仍须匹配 `wechat-layout.json` 中的二进制指纹 |
@@ -101,7 +101,7 @@
 
 安装器当前按 Ubuntu 软件源和 `requirements.txt` 的版本范围安装，**没有锁定整套实测环境**。例如 Frida 使用 `>=16,<17`，Pillow 使用 `>=9`，实际安装版本可能与上表不同；需要复现时，请自行固定所需依赖版本。
 
-系统控件还包括 PyGObject（`python3-gi`）、AT-SPI、GTK/GDK、D-Bus、xinput、X11、XInput 和 XTest。代码要求 AT-SPI 2.0 与 GTK/GDK 3.0 接口，但原目录没有保存这些系统包的精确版本号，不能将接口版本当作安装包版本。可在实际可运行的 Ubuntu 上查询并记录：
+系统控件还包括 PyGObject（`python3-gi`）、AT-SPI、GTK/GDK、D-Bus、xinput、X11、XInput 和 XTest。代码要求 AT-SPI 2.0 与 GTK/GDK 3.0 接口；接口版本与系统包版本不同。可在 Ubuntu 上使用以下命令查询实际安装版本：
 
 ```bash
 dpkg-query -W -f='${binary:Package}\t${Version}\n' \
@@ -302,7 +302,7 @@ autochat_wechat/
 ├── wechat-layout.json        # 支持的微信构建与接收布局
 ├── requirements.txt          # Python 依赖
 ├── README.md
-├── DISTRIBUTION.md
+├── LICENSE                   # MIT 许可证
 └── *.py / *.js / *.html      # 接收、截图、发送及配置面板模块
 ```
 
@@ -333,7 +333,7 @@ autochat_wechat/
 
 ### 修改文字回复的人设与语气
 
-**日常调整优先修改项目目录里的 `system-prompt.txt`**，例如回复语言、语气、长度、人设和需要遵守的会话习惯。它是 UTF-8 纯文本文件，不叫 `systemprompt.txt`。首次安装会自动生成；发布源码中没有这个本地文件时，先运行安装命令。
+编辑项目目录中的 **`system-prompt.txt`** 可调整回复语言、语气、长度、人设和会话习惯。该文件采用 UTF-8 编码，由 `bash reply_all.sh install` 自动创建。
 
 例如可以写成：
 
@@ -343,7 +343,7 @@ autochat_wechat/
 需要解释时适当展开，不要机械地重复固定开场白。
 ```
 
-还可以修改 `config.json` 中的 **`system_prompt` 字段**，它是基础系统提示词。编辑时保留其他 JSON 配置字段和合法格式，不要把一段提示词直接覆盖成整份 JSON 文件。
+基础系统提示词位于 `config.json` 的 **`system_prompt` 字段**。编辑时请保持 JSON 格式有效，并保留其他配置字段。
 
 文字模型实际收到的系统提示词按以下顺序拼接，追加文件不是替换整份提示词：
 
@@ -427,7 +427,7 @@ config.json 的 system_prompt
 
 会话文字和截图会发送到使用者配置的模型服务商，可能产生接口费用；请确认服务商的数据处理政策及自己的使用权限。
 
-不要公开 `.env`、API key、账号校准、群昵称、私人提示词、`temp/`、日志或运行后的整套配置。`.gitignore` 已列出主要本地文件，但分享压缩包时仍需检查实际内容；外层原始整包和历史备份也不应一起上传。
+不要公开 `.env`、API key、账号校准、群昵称、私人提示词、`temp/`、日志或运行后的整套配置。`.gitignore` 已列出主要本地文件，但分享压缩包时仍需检查实际内容。
 
 项目不附带微信客户端、模型服务账号或现成 API key，不是微信官方产品。
 
@@ -447,6 +447,16 @@ config.json 的 system_prompt
 
 ## 许可证
 
-**项目许可证尚未确定，当前没有 `LICENSE` 文件。** 本 README 不代表已经授予开源许可；正式公开发布前仍需确认源码权利、选定许可证并核对第三方依赖与适用条款。参见 [DISTRIBUTION.md](DISTRIBUTION.md)。
+本项目采用 [MIT 许可证](LICENSE)，版权归属为 © 2026 SCUTSJX。允许使用、复制、修改、分发和商用；分发本软件或其实质性部分时，须保留版权声明和许可声明。软件按“原样”提供，不作担保，具体条款见 LICENSE。
+
+第三方依赖分别适用其自身许可证，本项目的 MIT 许可不改变这些条款。Python 直接依赖及其上游许可文件：
+
+| 依赖 | 许可证原文 |
+| --- | --- |
+| HTTPX | [LICENSE.md](https://github.com/encode/httpx/blob/0.28.1/LICENSE.md) |
+| Frida Python 绑定 | [COPYING](https://github.com/frida/frida-python/blob/16.7.19/COPYING) |
+| Pillow | [LICENSE](https://github.com/python-pillow/Pillow/blob/10.4.0/LICENSE) |
+
+上述链接对应已实测版本；安装其他版本时，以该版本附带的许可文件为准。系统依赖通过 Ubuntu 软件源安装，各自适用其许可证。本项目不附带微信客户端、第三方依赖副本或模型服务账号；微信客户端及模型服务的使用还须遵守各自的协议。
 
 [↑ 返回目录](#contents)
