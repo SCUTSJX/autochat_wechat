@@ -1,0 +1,2 @@
+# Shell entrypoints must remain runnable on Linux after Windows checkouts.
+*.sh text eol=lf

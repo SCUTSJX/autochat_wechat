@@ -20,7 +20,13 @@
     "context_input_chars": 6000,
     "visible_context_rows": 12,
     "visible_context_chars": 3000,
-    "vision_concurrency": 4
+    "vision_concurrency": 4,
+    "stickers": {
+      "enabled": true,
+      "min_replies": 3,
+      "candidate_timeout_seconds": 0.3,
+      "send_timeout_seconds": 10
+    }
   },
   "group-mentions.json": {
     "group_reply_policy": "all",

@@ -148,8 +148,7 @@ class Store:
             return [self.decode(row) for row in reversed(rows)]
 
     def record(self, event):
-        value = (dict(kind='text', text=event.get('text',''), quote=None, sender_key='')
-                 if event.get('direction') == 'outgoing' else normalize(event))
+        value = normalize(event)
         with self.lock:
             existing = self.db.execute('SELECT seq FROM messages WHERE conversation=? AND message_id=?',
                 (event['conversation_id'], event['message_id'])).fetchone()
@@ -174,7 +173,7 @@ class Store:
                 event['direction'], speaker, value['kind'], value['text'], event.get('created_at', time.time()),
                 json.dumps(value['quote'], ensure_ascii=False),
                 json.dumps({key:val for key,val in event.items() if key != 'received_monotonic'}, ensure_ascii=False),
-                'queued' if value['kind'] in ('image','link','nontext') else 'none'))
+                'queued' if event['direction'] == 'incoming' and value['kind'] in ('image','link','nontext') else 'none'))
             self.db.commit()
             return self.get(cursor.lastrowid), True
 
@@ -272,6 +271,8 @@ def reply_plan(store, trigger, config):
 
 
 def media_text(row):
+    if row['direction'] == 'outgoing':
+        return '机器人已发送的非文字消息；不推断具体画面内容'
     meaning = row.get('meaning') or {}
     if row['media_status'] == 'success' and meaning.get('target_found'):
         return '视觉识别内容：'+meaning['content']+'；图片/卡片内文字：'+meaning.get('visible_text','')

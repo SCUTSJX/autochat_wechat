@@ -74,6 +74,8 @@ class Pipeline:
         row, fresh = self.store.record(payload)
         if not fresh:
             return row
+        if row['direction'] == 'outgoing':
+            return row  # Outgoing stickers are observations, never capture/reply tasks.
         trigger = reply_trigger(row, self.config)
         if not trigger and row['kind'] in ('text', 'link'):
             with self.observer_lock:

@@ -11,7 +11,7 @@ def matches(row, value):
                                for i in range(len(lines)-len(wanted)+1))
 
 
-def send(connection, controls, value, timeout=10):
+def send(connection, controls, value, timeout=10, on_write=None):
     from send_geometry import button_point
     # controls must resolve and verify the original session every time.
     root, field, button, messages = controls()
@@ -21,6 +21,8 @@ def send(connection, controls, value, timeout=10):
     if iface is None or editable is None or iface.get_text(0, -1):
         raise RuntimeError('原会话输入框不可写或有人工草稿，未覆盖、未发送。')
     count = sum(matches(row, value) for row in rows(messages))
+    if on_write:
+        on_write()
     if not editable.set_text_contents(value) or iface.get_text(0, -1) != value:
         raise RuntimeError('正文写入或回读失败，未点击。')
     root, field, button, messages = controls()

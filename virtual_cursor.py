@@ -2,7 +2,6 @@
 import argparse
 import ctypes as C
 import ctypes.util
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -57,6 +56,8 @@ class XConnection:
                   C.POINTER(C.c_uint)])
         self.bind(self.x, 'XGetInputFocus', C.c_int,
                   [C.c_void_p, C.POINTER(C.c_ulong), C.POINTER(C.c_int)])
+        self.bind(self.x, 'XSetInputFocus', C.c_int,
+                  [C.c_void_p, C.c_ulong, C.c_int, C.c_ulong])
         self.bind(self.xi, 'XIQueryVersion', C.c_int,
                   [C.c_void_p, C.POINTER(C.c_int), C.POINTER(C.c_int)])
         self.bind(self.xi, 'XISetClientPointer', C.c_int,
@@ -68,6 +69,10 @@ class XConnection:
         self.bind(self.xt, 'XTestFakeMotionEvent', C.c_int,
                   [C.c_void_p, C.c_int, C.c_int, C.c_int, C.c_ulong])
         self.bind(self.xt, 'XTestFakeButtonEvent', C.c_int,
+                  [C.c_void_p, C.c_uint, C.c_int, C.c_ulong])
+        self.bind(self.x, 'XStringToKeysym', C.c_ulong, [C.c_char_p])
+        self.bind(self.x, 'XKeysymToKeycode', C.c_ubyte, [C.c_void_p, C.c_ulong])
+        self.bind(self.xt, 'XTestFakeKeyEvent', C.c_int,
                   [C.c_void_p, C.c_uint, C.c_int, C.c_ulong])
         self.display = self.x.XOpenDisplay(None)
         if not self.display:
@@ -146,6 +151,39 @@ class XConnection:
         if not released:
             raise RuntimeError('释放请求失败；停止控制，不自动重试点击。')
 
+    def key(self, name, validate):
+        """Small fixed key vocabulary, always released; caller verifies focus."""
+        if name not in ('Down', 'Return', 'Escape'):
+            raise ValueError('仅允许表情流程的 Down / Return / Escape')
+        validate()
+        code = self.x.XKeysymToKeycode(self.display, self.x.XStringToKeysym(name.encode('ascii')))
+        if not code:
+            raise RuntimeError('当前键盘布局缺少所需按键')
+        released = False
+        try:
+            # Keys use the primary keyboard focus explicitly; the secondary
+            # pointer alone cannot establish a usable keyboard target.
+            self.select(self.primary)
+            if not self.xt.XTestFakeKeyEvent(self.display, code, 1, 0):
+                raise RuntimeError('按键请求失败')
+        finally:
+            released = bool(self.xt.XTestFakeKeyEvent(self.display, code, 0, 0))
+            self.x.XSync(self.display, 0)
+            self.select(self.pointer)
+        if not released:
+            raise RuntimeError('按键释放失败；停止且不重试')
+
+    def focus(self, window):
+        """Used only for a verified, exposed chat client in sticker delivery."""
+        if type(window) is not int or window <= 1 or window == self.root:
+            raise ValueError('不能将键盘焦点设置到根窗口或无效窗口')
+        self.select(self.primary)
+        try:
+            self.x.XSetInputFocus(self.display, window, 2, 0)  # RevertToParent, CurrentTime
+            self.x.XSync(self.display, 0)
+        finally:
+            self.select(self.pointer)
+
     def drag(self, start, end, duration=1.2, steps=48, validate=None):
         """One held secondary-button gesture; always release, including cancellation."""
         if (not isinstance(start, (list, tuple)) or len(start) != 2
@@ -223,6 +261,7 @@ def ctypes_library(name):
 
 
 def serve(connection, path):
+    import fcntl
     # Local filesystem access only. No TCP listener and no shell execution.
     parent = Path(path).parent
     if parent.stat().st_uid != os.getuid() or parent.stat().st_mode & 0o077:

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from core import ROOT
 from mention_filter import wants_reply
+from sent_events import SentEvents
 
 
 def current_wechat_pid():
@@ -85,6 +86,7 @@ class Receiver:
         self.accept_nontext = profile.get('accept_nontext') is True and not calibration
         self.accept_own_messages = profile.get('accept_own_messages') is True and not calibration
         self.record_all_messages = profile.get('record_all_messages') is True and not calibration
+        self.sent_events = SentEvents()
         self.group_reply_policy = profile.get('group_reply_policy', 'all')
         self.self_mention_names = profile.get('self_mention_names', [])
         if self.reply_queue_limit is not None and (type(self.reply_queue_limit) is not int or self.reply_queue_limit != 10):
@@ -136,6 +138,12 @@ class Receiver:
             self.failure = "消息记录不符合已验证布局，停止。"
             self.ready.set()
         elif payload.get('type') == 'message':
+            if self.accept_own_messages and payload.get('direction') == 'outgoing':
+                # Confirmation must not be lost when the incoming queue is full,
+                # or blocked by a screenshot waiting for the desktop worker.
+                self.sent_events.record(payload)
+                if payload.get('message_kind') == 'text':
+                    return  # Real bot text is recorded once by Store.assistant.
             if self.reply_queue_limit:
                 kind = payload.get('message_kind')
                 accepted = (kind == 'text' or (kind == 'image' and self.accept_images)

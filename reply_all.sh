@@ -5,6 +5,8 @@ if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
   echo "安装：bash reply_all.sh install"
   echo "账号初始化：bash reply_all.sh init [--contact 好友窗口名称]"
   echo "检查环境与配置：bash reply_all.sh check"
+  echo "查看表情状态：bash reply_all.sh stickers status"
+  echo "检查草稿后恢复会话：bash reply_all.sh stickers resume --conversation 会话ID"
   echo "自动回复：bash reply_all.sh [--preview]"
   exit 0
 fi
@@ -65,6 +67,11 @@ fi
 if [[ ! -x .venv/bin/python ]]; then
   echo "缺少 .venv/bin/python，请先用普通用户运行 bash reply_all.sh install。" >&2
   exit 1
+fi
+if [[ "${1:-}" == stickers ]]; then
+  shift
+  export PYTHONUTF8=1 LANG=C.UTF-8 LC_ALL=C.UTF-8
+  exec .venv/bin/python -B sticker_state.py "$@"
 fi
 if [[ "${1:-}" == check || "${1:-}" == --check ]]; then
   if [[ "$#" -ne 1 || "$EUID" -eq 0 ]]; then

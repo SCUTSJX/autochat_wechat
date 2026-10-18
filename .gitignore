@@ -1,0 +1,4 @@
+.test-deps/
+__pycache__/
+*.py[cod]
+temp/

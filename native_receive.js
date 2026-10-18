@@ -98,7 +98,7 @@ Interceptor.attach(directionAddress, {
                     : ((own===0 && (to!==self || from===self))
                        || (own===1 && (from!==self || to===self)))))
                 throw new Error('direction identity mismatch');
-            if (profile.all_windows && own===1) return;
+            if (profile.all_windows && own===1 && profile.accept_own_messages!==true) return;
             const conversation=group || (own===1 ? to : from);
             const id=p.add(layout.server_id_offset).readU64().toString();
             if (!conversation || id==='0') {

@@ -104,11 +104,31 @@ def load_profile(root=ROOT):
 
 
 def reply_options(root=ROOT):
+    from sticker_library import library_settings, initial_groups
     path = Path(root) / 'group-mentions.json'
     value = read_object(path)
+    from sticker_reply import sticker_settings
+    config = {}
+    revision = hashlib.sha256()
+    for name in ('config.json', 'reply-tuning.json', 'group-mentions.json'):
+        source = Path(root)/name
+        data = source.read_bytes() if source.exists() else b''
+        revision.update(name.encode('ascii')+b'\0'+data+b'\0')
+        if name != 'group-mentions.json' and source.exists():
+            saved = read_object(source)
+            if 'stickers' in saved:
+                config['stickers'] = saved['stickers']
+    enabled = value.get('sticker_enabled', sticker_settings(config)['enabled'])
+    minimum = value.get('sticker_min_replies', sticker_settings(config)['min_replies'])
+    sticker_settings(dict(stickers=dict(min_replies=minimum)))
+    if type(enabled) is not bool:
+        raise ValueError('表情回复开关必须为布尔值。')
     return dict(group_reply_policy=value.get('group_reply_policy', 'all'),
                 self_mention_names=value.get('self_mention_names', []),
-                revision=hashlib.sha256(path.read_bytes()).hexdigest())
+                sticker_enabled=enabled, sticker_min_replies=minimum,
+                sticker_library=library_settings(value.get('sticker_library'), strict_names=False),
+                sticker_library_defaults=initial_groups(),
+                revision=revision.hexdigest())
 
 
 def save_reply_options(root, command):
@@ -117,6 +137,14 @@ def save_reply_options(root, command):
         raise ValueError('回复策略已被其他窗口修改，请刷新后重试。')
     policy = command.get('group_reply_policy')
     names = command.get('self_mention_names')
+    enabled = command.get('sticker_enabled', current['sticker_enabled'])
+    minimum = command.get('sticker_min_replies', current['sticker_min_replies'])
+    from sticker_reply import sticker_settings
+    sticker_settings(dict(stickers=dict(min_replies=minimum)))
+    from sticker_library import library_settings
+    library = library_settings(command.get('sticker_library', current['sticker_library']))
+    if type(enabled) is not bool:
+        raise ValueError('表情回复开关必须为布尔值。')
     if (policy not in ('all', 'mention_self') or not isinstance(names, list) or len(names) > 30
             or any(not isinstance(n, str) or not n.strip() or len(n) > 80
                    or any(ord(c) < 32 for c in n) for n in names)):
@@ -124,8 +152,10 @@ def save_reply_options(root, command):
     names = list(dict.fromkeys(n.strip() for n in names))
     if policy == 'mention_self' and not names:
         raise ValueError('仅回复 @ 时，至少填写一个实际显示的完整群昵称。')
-    write_private(Path(root) / 'group-mentions.json',
-                  dict(group_reply_policy=policy, self_mention_names=names))
+    value = read_object(Path(root) / 'group-mentions.json')
+    value.update(group_reply_policy=policy, self_mention_names=names, sticker_enabled=enabled,
+                 sticker_library=library, sticker_min_replies=minimum)
+    write_private(Path(root) / 'group-mentions.json', value)
     return reply_options(root)
 
 

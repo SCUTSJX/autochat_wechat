@@ -14,7 +14,7 @@
 <main><div class="eyebrow">CONNECTION SETTINGS</div><div class="top"><h1>API 配置中心</h1><div class="top-buttons"><button class="ghost" id="refresh">↻ 刷新状态</button><button class="ghost" id="close">关闭面板</button></div></div><p class="sub">为文字回复和图片识别选择合适的接口。保存后，下一次请求立即生效。</p>
 <div class="overview"><div class="overview-left"><div class="overview-symbol">⇄</div><div><strong>两个接口，分别掌控</strong><p>可以使用不同服务商，也可以配置为相同的地址与模型。</p></div></div><span class="pill" id="configured">正在读取配置</span></div>
 <div id="loading">正在读取本地 API 配置…</div><div class="cards" id="cards"></div><div id="notice" role="status" aria-live="polite" class="notice"></div>
-<section class="card" style="margin-top:24px" aria-label="回复策略"><div class="card-top"><div><h2>群聊回复策略</h2><p>选择后点击右侧“保存回复策略”。修改后重启自动回复生效。</p></div><button id="reply-save" form="reply-settings" type="submit" class="primary" disabled>保存回复策略</button></div><p id="reply-status" role="status" aria-live="polite" class="test-result" style="margin:0 22px">正在读取已保存的群聊策略…</p><form id="reply-settings" class="form"><label>回复范围<select id="reply-policy" disabled><option value="all">回复群内文字消息</option><option value="mention_self">仅回复 @ 我的消息</option></select></label><label>你在群中的完整昵称（多个昵称用换行分隔，不加 @）<textarea id="reply-names" disabled rows="3" style="width:100%;font:inherit;border:1px solid #d8e1d8;border-radius:8px;padding:10px"></textarea></label></form></section><div class="foot"><span><b>● 无需重启</b>　正在处理的请求会完成，后续请求使用新配置。</span><span>密钥仅保存在本机 · API 切换无需重启</span></div></main>
+<section class="card" style="margin-top:24px" aria-label="回复策略"><div class="card-top"><div><h2>回复策略</h2><p>选择后点击右侧“保存回复策略”。修改后重启自动回复生效。</p></div><button id="reply-save" form="reply-settings" type="submit" class="primary" disabled>保存回复策略</button></div><p id="reply-status" role="status" aria-live="polite" class="test-result" style="margin:0 22px">正在读取已保存的回复策略…</p><form id="reply-settings" class="form"><label>回复范围<select id="reply-policy" disabled><option value="all">回复群内文字消息</option><option value="mention_self">仅回复 @ 我的消息</option></select></label><label>你在群中的完整昵称（多个昵称用换行分隔，不加 @）<textarea id="reply-names" disabled rows="3" style="width:100%;font:inherit;border:1px solid #d8e1d8;border-radius:8px;padding:10px"></textarea></label><label class="session-option"><input type="checkbox" id="sticker-enabled" disabled><span><strong>启用表情包回复</strong><small>按下方配置的普通回复次数主动附带表情；“回复一个嘻嘻”等明确指令直接执行，不影响普通回复计数。没有匹配表情时，关键词可能作为文字发出；可在微信商店添加更多表情包。</small></span></label><label>表情发送间隔（每 N 次普通回复发送一个）<input id="sticker-min-replies" type="number" min="1" max="1000" step="1" required value="3" disabled><span class="field-hint">默认3，按会话独立计数。自动表情执行过发送按键后重新计数；明确要求发送的表情不占次数。</span></label><label class="session-option"><input type="checkbox" id="library-enabled" disabled><span><strong>使用分组表情库</strong><small>模型只选择含义组名，程序从组内随机选择实际输入的关键词。关闭时沿用模型自由生成关键词的流程。</small></span></label><p id="library-warning" style="color:#a04e2d">未启用分组表情库：模型生成的关键词可能没有对应表情，进而直接作为文字发出，不建议使用自由关键词模式。</p><div id="sticker-groups"></div><button id="add-sticker-group" class="ghost" type="button" disabled>＋ 添加含义分组</button> <button id="add-initial-groups" class="ghost" type="button" disabled>添加初始分组</button><p class="field-hint">组名只能填写一个含义词，如“卖萌”或“开心”，不可填写“开心，喜悦”等组合；组内每行填写一个能在微信触发表情的原始关键词，如“路略略”。启用后至少保存一个非空分组。初始分组是可编辑示例，不保证当前微信已添加对应表情；请按实际候选修改关键词。</p></form></section><div class="foot"><span><b>● 无需重启</b>　正在处理的请求会完成，后续请求使用新配置。</span><span>密钥仅保存在本机 · API 切换无需重启</span></div></main>
 <template id="card-template"><section class="card" role="region"><div class="card-top"><div class="channel-icon"></div><div><h2></h2><p class="channel-description"></p></div></div><div class="active"><div class="active-label"><i></i>当前生效</div><div class="active-model"></div><div class="active-host"></div></div><form class="form"><div class="label-row"><span class="label-title">已保存的方案</span><button type="button" class="link delete">删除备用方案</button></div><div class="scheme"><select aria-label="选择已保存的方案"></select><button type="button" class="add">＋ 新增</button></div><label>方案名称<input name="name" required maxlength="80" placeholder="例如：日常使用 / 备用接口"></label><label>接口地址<input class="url" name="base_url" type="url" required maxlength="2000" placeholder="https://api.example.com/v1"></label><label>模型名称<input class="model" name="model" required maxlength="200" placeholder="填写服务商提供的模型 ID"></label><label>API 密钥<div class="secret"><input name="api_key" type="password" maxlength="8192" autocomplete="new-password" placeholder="填写 API Key"><button type="button" class="reveal" aria-label="显示或隐藏新输入的密钥">显示</button></div><div class="field-hint">密钥仅保存在本机，已保存的密钥不会回传到页面。</div></label><label class="session-option"><input name="opencode_session" type="checkbox"><span><strong>添加 OpenCode session 头</strong><small>自动生成 x-opencode-session；DeepSeek 官方等接口通常关闭。</small></span></label><div class="two"><label>请求超时 · 秒<input name="timeout_seconds" type="number" min="1" max="600" required></label><label>输出额度 · Tokens<input name="max_tokens" type="number" required></label></div><div class="test-row"><button class="test" type="button">◉ 测试连接</button><span class="test-result" role="status">发送固定测试内容，不带聊天记录</span></div><div class="actions"><button class="primary" type="submit">保存并启用</button><button class="reserve" type="button">存为备用</button></div></form></section></template>
 <script>
 'use strict';
@@ -24,6 +24,7 @@ if(token){sessionStorage.setItem('api-panel-token',token);history.replaceState(n
 let state=null, closed=false, replyRevision=null;
 let replyLoaded=false, replyBusy=false, replyLoadSequence=0;
 const cards={};
+let initialStickerGroups=[];
 const titles={text:'文字回复',vision:'图片识别'};
 const descriptions={text:'结合对话上下文，生成微信回复',vision:'分析会话截图，生成图片 meaning'};
 function notify(message,error=false){const n=document.querySelector('#notice');n.textContent=message;n.className='notice'+(error?' error':'');n.style.display='block';}
@@ -51,18 +52,48 @@ function replyStatus(message,error=false){
   status.textContent=message;status.className='test-result'+(error?' error':'');
 }
 function disableReplyControls(disabled){
-  document.querySelectorAll('#reply-settings select, #reply-settings textarea, #reply-save').forEach(node=>node.disabled=disabled);
+  document.querySelectorAll('#reply-settings select, #reply-settings textarea, #reply-settings input, #reply-settings button, #reply-save').forEach(node=>node.disabled=disabled);
 }
+function updateLibraryWarning(){
+  document.querySelector('#library-warning').hidden=document.querySelector('#library-enabled').checked;
+}
+function addStickerGroup(group={name:'',keywords:[]}){
+  const row=document.createElement('fieldset');row.className='sticker-group';
+  row.style.cssText='border:1px solid #dfe6dd;border-radius:9px;padding:14px;margin:12px 0';
+  const title=document.createElement('legend');title.textContent='表情含义分组';row.appendChild(title);
+  const nameLabel=document.createElement('label');nameLabel.textContent='组名 / 单个含义词';
+  const name=document.createElement('input');name.className='group-name';name.maxLength=16;name.required=true;name.pattern='[A-Za-z\\u3400-\\u9fff]{1,16}';name.title='只填写一个词，如开心；不可含逗号、顿号、空格或其他符号';name.placeholder='例如：开心';name.value=group.name;nameLabel.appendChild(name);
+  const wordsLabel=document.createElement('label');wordsLabel.textContent='触发关键词（每行一个）';
+  const words=document.createElement('textarea');words.className='group-keywords';words.rows=4;words.style.cssText='width:100%;font:inherit;padding:10px;border:1px solid #dfe6dd;border-radius:7px';words.placeholder='路略略\n嘻嘻';words.value=group.keywords.join('\n');wordsLabel.appendChild(words);
+  const remove=document.createElement('button');remove.type='button';remove.className='ghost';remove.textContent='删除分组';remove.addEventListener('click',()=>row.remove());
+  row.append(nameLabel,wordsLabel,remove);document.querySelector('#sticker-groups').appendChild(row);
+}
+function libraryFields(){
+  return {enabled:document.querySelector('#library-enabled').checked,groups:[...document.querySelectorAll('.sticker-group')].map(row=>({name:row.querySelector('.group-name').value.trim(),keywords:row.querySelector('.group-keywords').value.split(/\r?\n/).map(word=>word.trim()).filter(Boolean)}))};
+}
+document.querySelector('#add-initial-groups').addEventListener('click',()=>{
+  const names=new Set([...document.querySelectorAll('.group-name')].map(node=>node.value.trim()));
+  for(const group of initialStickerGroups)if(!names.has(group.name)){addStickerGroup(group);names.add(group.name);}
+});
+document.querySelector('#library-enabled').addEventListener('change',updateLibraryWarning);
+document.querySelector('#add-sticker-group').addEventListener('click',()=>addStickerGroup());
 function applyReplySettings(data){
-  if(!data||!['all','mention_self'].includes(data.group_reply_policy)||!Array.isArray(data.self_mention_names)||data.self_mention_names.some(name=>typeof name!=='string')||typeof data.revision!=='string')throw new Error('群聊策略响应格式无效，请检查配置文件。');
+  if(!data||!['all','mention_self'].includes(data.group_reply_policy)||!Array.isArray(data.self_mention_names)||data.self_mention_names.some(name=>typeof name!=='string')||typeof data.revision!=='string'||typeof data.sticker_enabled!=='boolean'||!Number.isInteger(data.sticker_min_replies)||data.sticker_min_replies<1||data.sticker_min_replies>1000||!data.sticker_library||typeof data.sticker_library.enabled!=='boolean'||!Array.isArray(data.sticker_library.groups))throw new Error('回复策略响应格式无效，请检查配置文件。');
   replyRevision=data.revision;
+  initialStickerGroups=data.sticker_library_defaults||[];
   document.querySelector('#reply-policy').value=data.group_reply_policy;
   document.querySelector('#reply-names').value=data.self_mention_names.join('\n');
+  document.querySelector('#sticker-enabled').checked=data.sticker_enabled;
+  document.querySelector('#sticker-min-replies').value=data.sticker_min_replies;
+  document.querySelector('#library-enabled').checked=data.sticker_library.enabled;
+  document.querySelector('#sticker-groups').replaceChildren();
+  for(const group of data.sticker_library.groups)addStickerGroup(group);
+  updateLibraryWarning();
 }
 async function loadReplySettings(){
   if(closed||replyBusy)return;
   const requestId=++replyLoadSequence;
-  replyLoaded=false;disableReplyControls(true);replyStatus('正在读取已保存的群聊策略…');
+  replyLoaded=false;disableReplyControls(true);replyStatus('正在读取已保存的回复策略…');
   try{
     const data=await api('/api/reply-settings');
     if(requestId!==replyLoadSequence||closed)return;
@@ -78,15 +109,16 @@ async function load(){await Promise.all([loadAPIs(),loadReplySettings()]);}
 document.querySelector('#reply-settings').addEventListener('submit',async event=>{
   event.preventDefault();if(closed||replyBusy)return;
   if(!replyLoaded){replyStatus('尚未读取已保存的策略，请先点击“刷新状态”。',true);return;}
-  ++replyLoadSequence;replyBusy=true;disableReplyControls(true);replyStatus('正在保存群聊策略…');
+  if(!event.currentTarget.reportValidity())return;
+  ++replyLoadSequence;replyBusy=true;disableReplyControls(true);replyStatus('正在保存回复策略…');
   let posted=false;
   try{
     const names=document.querySelector('#reply-names').value.split(/\r?\n/).map(name=>name.trim()).filter(Boolean);
-    const submitted=await api('/api/reply-settings',{revision:replyRevision,group_reply_policy:document.querySelector('#reply-policy').value,self_mention_names:names});
+    const submitted=await api('/api/reply-settings',{revision:replyRevision,group_reply_policy:document.querySelector('#reply-policy').value,self_mention_names:names,sticker_enabled:document.querySelector('#sticker-enabled').checked,sticker_min_replies:Number(document.querySelector('#sticker-min-replies').value),sticker_library:libraryFields()});
     posted=true;
     const saved=await api('/api/reply-settings');
     applyReplySettings(saved);replyLoaded=true;
-    if(saved.group_reply_policy!==submitted.group_reply_policy||JSON.stringify(saved.self_mention_names)!==JSON.stringify(submitted.self_mention_names)){
+    if(saved.group_reply_policy!==submitted.group_reply_policy||JSON.stringify(saved.self_mention_names)!==JSON.stringify(submitted.self_mention_names)||saved.sticker_enabled!==submitted.sticker_enabled||saved.sticker_min_replies!==submitted.sticker_min_replies||JSON.stringify(saved.sticker_library)!==JSON.stringify(submitted.sticker_library)){
       replyStatus('保存后策略又被其他窗口修改，已显示最新内容，请核对。',true);
     }else{
       replyStatus('已保存并重新读取确认。请停止并重新启动自动回复后生效。');

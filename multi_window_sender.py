@@ -165,6 +165,8 @@ class Windows:
         self.last_topology_check = 0
         self.idle_keys = deque()
         self.last_idle_poll = 0
+        self.pending_sticker = None
+        self.last_sticker_finish = None
 
     def forget(self, key):
         self.window_routes.pop(key, None)
@@ -419,8 +421,16 @@ class Windows:
         root = application()
         route = self.routes[peer]
         before = self.connection.status()['primary']
+        owned = []
         with self.expose(route, route['pid']):
-            result = send(self.connection, lambda:self.controls(peer, root), text)
+            try:
+                result = send(self.connection, lambda:self.controls(peer, root), text,
+                              on_write=lambda: owned.append(True))
+            except Exception:
+                from sticker_ui import clear_owned_draft
+                cleanup = clear_owned_draft(lambda:self.controls(peer), text) if owned else 'not_written'
+                print('文字发送未确认；草稿清理：'+cleanup, file=sys.stderr, flush=True)
+                raise
         if self.connection.status()['primary'] != before:
             raise RuntimeError('发送期间主鼠标或焦点发生变化，停止且不重复发送。')
         # Refresh only this window, then acknowledge; no all-window scan after sending.
@@ -429,6 +439,143 @@ class Windows:
         self.changes[key] = deque((entry for entry in self.changes[key]
                                   if not matches(entry[1], text)), maxlen=256)
         return dict(result, conversation_id=peer)
+
+    def sticker_focus(self, peer):
+        """Validate keyboard focus belongs to the exact bound X window."""
+        root, field, _, _ = self.controls(peer)
+        route = self.routes[peer]
+        target = self.stack.target(route['name'], root.get_process_id())
+        window = self.connection.status()['primary']['focus_window']
+        seen = set()
+        for _ in range(32):
+            if window == target:
+                return
+            if window in (0, 1, self.connection.root) or window in seen:
+                break
+            seen.add(window)
+            # Qt completion popups may be separate top-level X windows. Accept
+            # only a transient chain back to this chat, never just a shared PID.
+            transient = self.stack.property(window, 'WM_TRANSIENT_FOR', 'WINDOW')
+            owner = self.stack.property(window, '_NET_WM_PID', 'CARDINAL')
+            if transient and owner in (None, [root.get_process_id()]):
+                window = transient[0]
+            else:
+                window, _ = self.stack.tree(window)
+        raise RuntimeError('键盘焦点不在原聊天窗口；未发送按键')
+
+    def prepare_sticker(self, peer, keyword, task, timeout=0.3):
+        from sticker_library import input_keyword as valid_keyword
+        if self.pending_sticker is not None or not valid_keyword(keyword):
+            return dict(ok=False, reason='invalid_or_busy', cleanup='not_written')
+        if not isinstance(task, str) or len(task) != 32 or any(c not in '0123456789abcdef' for c in task):
+            return dict(ok=False, reason='invalid_task', cleanup='not_written')
+        self.pointer()
+        route = self.routes[peer]
+        exposure = self.stack.expose(route['name'], route['pid'], allow_focus=True)
+        exposure.__enter__()
+        self.pending_sticker = dict(peer=peer, keyword=keyword, task=task,
+                                    exposure=exposure, written=False, entered=False,
+                                    diagnostics=dict(stage='write', down_sent=False,
+                                                     enter_sent=False, wait_seconds=timeout))
+        try:
+            root, field, _, _ = self.controls(peer)
+            text, editable = field.get_text_iface(), field.get_editable_text_iface()
+            if text is None or editable is None or text.get_text(0, -1):
+                return dict(self.finish_sticker(task), ok=False, reason='existing_draft', cleanup='changed')
+            self.connection.focus(self.stack.client(route['name'], route['pid']))
+            if not field.get_component_iface().grab_focus():
+                raise RuntimeError('输入框无法获得焦点')
+            self.sticker_focus(peer)
+            self.pending_sticker['written'] = True
+            if not editable.set_text_contents(keyword) or text.get_text(0, -1) != keyword:
+                raise RuntimeError('表情关键词写入或回读失败')
+            # Candidates can be painted without an accessible popup. Follow
+            # the configured delay and keyboard sequence unconditionally.
+            self.pending_sticker['diagnostics']['stage'] = 'wait'
+            time.sleep(timeout)
+            _, field, _, _ = self.controls(peer)
+            if field.get_text_iface().get_text(0, -1) != keyword:
+                raise RuntimeError('等待候选时草稿发生变化')
+            self.connection.key('Down', lambda: self.sticker_focus(peer))
+            self.pending_sticker['diagnostics']['down_sent'] = True
+            self.pending_sticker['diagnostics']['stage'] = 'down'
+            time.sleep(0.1)
+            return dict(ok=True, task=task, ready=True, diagnostics=dict(self.pending_sticker['diagnostics']))
+        except Exception as exc:
+            result = self.finish_sticker(task)
+            return dict(result, ok=False, reason='prepare_failed', error_type=type(exc).__name__)
+
+    def commit_sticker(self, task):
+        pending = self.pending_sticker
+        if pending is None or pending['task'] != task or pending['entered']:
+            return dict(ok=False, entered=False, reason='invalid_task')
+        peer = pending['peer']
+        _, field, _, messages = self.controls(peer)
+        if field.get_text_iface().get_text(0, -1) != pending['keyword']:
+            return dict(ok=False, entered=False, reason='draft_changed')
+        self.sticker_focus(peer)
+        try:
+            pending['keyword_rows_before'] = sum(matches(value, pending['keyword']) for value in rows(messages))
+        except Exception:
+            pending['keyword_rows_before'] = None  # Optional text fallback readback.
+        pending['entered'] = True
+        pending['diagnostics']['stage'] = 'enter_attempt'
+        self.connection.key('Return', lambda: self.sticker_focus(peer))
+        pending['diagnostics']['enter_sent'] = True
+        pending['diagnostics']['stage'] = 'enter'
+        return dict(ok=True, entered=True, conversation_id=peer, diagnostics=dict(pending['diagnostics']))
+
+    def finish_sticker(self, task):
+        from sticker_ui import clear_owned_draft
+        pending = self.pending_sticker
+        if pending is None or pending['task'] != task:
+            if self.last_sticker_finish and self.last_sticker_finish[0] == task:
+                return dict(self.last_sticker_finish[1])
+            return dict(ok=False, cleanup='invalid_task')
+        self.pending_sticker = None
+        cleanup = 'not_written'
+        keyword_text_seen = False
+        try:
+            if pending['written']:
+                cleanup = clear_owned_draft(lambda: self.controls(pending['peer']), pending['keyword'])
+            if pending['entered'] and pending.get('keyword_rows_before') is not None and cleanup in ('empty', 'cleared'):
+                _, field, _, messages = self.controls(pending['peer'])
+                keyword_text_seen = (field.get_text_iface().get_text(0, -1) == '' and
+                    sum(matches(value, pending['keyword']) for value in rows(messages)) > pending['keyword_rows_before'])
+        except Exception:
+            # A failed optional message read must not revoke a completed clear.
+            pass
+        result = dict(ok=True, cleanup=cleanup, entered=pending['entered'],
+                      keyword_text_seen=keyword_text_seen, diagnostics=pending.get('diagnostics', {}))
+        try:
+            pending['exposure'].__exit__(None, None, None)
+        except Exception as exc:
+            result['window_restore_error'] = str(exc)[:300] if isinstance(exc, RuntimeError) else type(exc).__name__
+        self.last_sticker_finish = (task, dict(result))
+        return result
+
+    def sticker_status(self, task):
+        """Read-only text fallback detection; never infer sticker success."""
+        pending = self.pending_sticker
+        if pending is None or pending['task'] != task:
+            return dict(ok=False, keyword_text_seen=False, reason='invalid_task')
+        try:
+            _, field, _, messages = self.controls(pending['peer'])
+            baseline = pending.get('keyword_rows_before')
+            seen = (pending['entered'] and baseline is not None and
+                    field.get_text_iface().get_text(0, -1) == '' and
+                    sum(matches(value, pending['keyword']) for value in rows(messages)) > baseline)
+            return dict(ok=True, keyword_text_seen=seen)
+        except Exception as exc:
+            return dict(ok=False, keyword_text_seen=False, error_type=type(exc).__name__)
+
+    def recover_sticker_draft(self, peer, keyword):
+        from sticker_library import input_keyword as valid_keyword
+        from sticker_ui import clear_owned_draft
+        if keyword is not None and not valid_keyword(keyword):
+            return dict(ok=False, cleanup='invalid_keyword')
+        cleanup = clear_owned_draft(lambda: self.controls(peer), keyword)
+        return dict(ok=cleanup in ('empty', 'cleared'), cleanup=cleanup)
 
     def verify_initialization(self, peer, name, incoming, outgoing):
         # This is called only by the explicit, interactive init command.
@@ -465,7 +612,7 @@ def main():
         while True:
             ready, _, _ = select.select([sys.stdin], [], [], 0.01 if windows.discovery_needed and not waiting_for_send else 0.05)
             if not ready:
-                if not waiting_for_send:
+                if not waiting_for_send and windows.pending_sticker is None:
                     windows.background_step()
                 continue
             line = sys.stdin.readline()
@@ -476,7 +623,20 @@ def main():
             # Restart it later rather than committing stale snapshots after send.
             windows.scan = None
             try:
-                if request['op'] == 'bind':
+                if windows.pending_sticker is not None and request['op'] not in ('sticker_commit', 'sticker_status', 'sticker_finish'):
+                    raise RuntimeError('表情发送中，桌面操作不能插入')
+                if request['op'] == 'sticker_prepare':
+                    result = windows.prepare_sticker(request['conversation_id'], request['keyword'],
+                        request['task'], min(30, max(0.1, float(request.get('timeout', 0.3)))))
+                elif request['op'] == 'sticker_commit':
+                    result = windows.commit_sticker(request['task'])
+                elif request['op'] == 'sticker_finish':
+                    result = windows.finish_sticker(request['task'])
+                elif request['op'] == 'sticker_status':
+                    result = windows.sticker_status(request['task'])
+                elif request['op'] == 'sticker_recover':
+                    result = windows.recover_sticker_draft(request['conversation_id'], request.get('keyword'))
+                elif request['op'] == 'bind':
                     waiting_for_send = False
                     result = windows.bind(request['event'])
                     waiting_for_send = result.get('verified') is True and request['event'].get('await_send', True)
@@ -505,6 +665,11 @@ def main():
                 response = {'ok':False, 'error':traceback.format_exc()}
             print(json.dumps(response, ensure_ascii=False), flush=True)
     finally:
+        if windows.pending_sticker is not None:
+            try:
+                windows.finish_sticker(windows.pending_sticker['task'])
+            except Exception:
+                print('退出时表情草稿清理未确认。', file=sys.stderr, flush=True)
         if windows.connection:
             windows.connection.close()
 

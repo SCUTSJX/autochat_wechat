@@ -70,7 +70,7 @@ class WindowStack:
             if children:
                 self.c.x.XFree(C.cast(children, C.c_void_p))
 
-    def target(self, name, pid):
+    def client(self, name, pid):
         clients = self.property(self.c.root, '_NET_CLIENT_LIST', 'WINDOW') or []
         found = []
         for window in clients:
@@ -83,7 +83,10 @@ class WindowStack:
                 found.append(window)
         if len(found) != 1:
             raise RuntimeError('独立窗口的 Xorg 标题／进程匹配不唯一。')
-        target = found[0]
+        return found[0]
+
+    def target(self, name, pid):
+        target = self.client(name, pid)
         for _ in range(32):
             parent, _ = self.tree(target)
             if parent == self.c.root:
@@ -93,13 +96,14 @@ class WindowStack:
             target = parent
         raise RuntimeError('独立窗口不属于当前桌面。')
 
-    def expose(self, name, pid):
-        return Exposure(self, name, pid)
+    def expose(self, name, pid, allow_focus=False):
+        return Exposure(self, name, pid, allow_focus)
 
 
 class Exposure:
-    def __init__(self, stack, name, pid):
+    def __init__(self, stack, name, pid, allow_focus=False):
         self.stack, self.name, self.pid = stack, name, pid
+        self.allow_focus = allow_focus
         self.target = None
         self.original = []
 
@@ -130,5 +134,7 @@ class Exposure:
 
     def __exit__(self, *args):
         self.restore()
-        if self.stack.c.status()['primary'] != self.primary:
+        after = self.stack.c.status()['primary']
+        unchanged = (after['x'], after['y']) == (self.primary['x'], self.primary['y']) if self.allow_focus else after == self.primary
+        if not unchanged:
             raise RuntimeError('恢复窗口层级后主鼠标或焦点变化，停止。')
