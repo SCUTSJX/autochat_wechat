@@ -16,6 +16,7 @@
 
 > **项目状态：测试阶段。** 目前支持的 Linux 微信构建见[环境要求](#requirements)。首次使用请先在测试好友会话中完成初始化和收发验证。
 
+完整演示请移步：https://www.bilibili.com/video/BV1dtn36LEGd
 <a id="contents"></a>
 
 ## 目录
